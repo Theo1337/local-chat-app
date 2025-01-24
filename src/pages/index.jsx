@@ -10,6 +10,8 @@ import { MdEmojiEmotions, MdOutlineModeEdit } from "react-icons/md";
 import { BsReply } from "react-icons/bs";
 import { LuSettings } from "react-icons/lu";
 
+import { notifyUser } from "@/functions/notify";
+
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -34,6 +36,7 @@ const Home = () => {
       id: "",
       color: 0,
     },
+    notified: false,
   });
   const [settings, setSettings] = useState({
     name: "",
@@ -118,9 +121,19 @@ const Home = () => {
     });
   }, [socket]);
 
+  const notifyMessage = () => {
+    setConfigs({
+      ...configs,
+      notified: true,
+    });
+    console.log(messages, configs.notified);
+  };
+
   useEffect(() => {
     socket.on("messages", (e) => {
       setMessages(e.value);
+
+      // notifyMessage();
     });
   }, [socket]);
 
@@ -254,7 +267,7 @@ const Home = () => {
                       : textColors[configs.user.color].primary
                   } p-1 px-3 m-0.5`}
                 >
-                  {each.reply && !each.type === "deleted" && (
+                  {each.reply && each.type !== "deleted" && (
                     <div
                       className={`border-0 border-solid border-s-4 border-red-500 ${
                         textColors[configs.user.color].secondary
@@ -374,7 +387,7 @@ const Home = () => {
                       : textColors[each.user.color].primary
                   } p-1 px-3 m-0.5`}
                 >
-                  {each.reply && (
+                  {each.reply && each.type !== "deleted" && (
                     <div
                       className={`border-0 border-solid border-s-4 border-red-500 ${
                         textColors[each.user.color].secondary
@@ -433,6 +446,7 @@ const Home = () => {
                             Editada
                           </div>
                         )}
+                        {each.time}
                       </div>
                     </div>
                   )}
