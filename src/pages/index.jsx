@@ -10,8 +10,6 @@ import { MdEmojiEmotions, MdOutlineModeEdit } from "react-icons/md";
 import { BsReply } from "react-icons/bs";
 import { LuSettings } from "react-icons/lu";
 
-import { notifyUser } from "@/functions/notify";
-
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,17 +24,21 @@ import socket from "@/lib/socket";
 
 const Home = () => {
   const [messages, setMessages] = useState([]);
+  const [notified, setNotified] = useState({
+    value: false,
+    focused: false,
+  });
   const [configs, setConfigs] = useState({
     value: "",
     reply: null,
     type: "message",
+    image: "",
     lastMessage: null,
     user: {
       name: "",
       id: "",
       color: 0,
     },
-    notified: false,
   });
   const [settings, setSettings] = useState({
     name: "",
@@ -81,12 +83,42 @@ const Home = () => {
     },
     {
       primary: "bg-white",
-      secondary: "bg-white",
+      secondary: "bg-neutral-100",
       selected: true,
     },
   ]);
 
+  const [userTyping, setUserTyping] = useState({
+    typing: false,
+    color: 0,
+  });
+  const [inputFocus, setInputFocus] = useState(false);
+
   const lastMessageRef = useRef(null);
+
+  const notifyUser = (c) => {
+    if (navigator.userAgent.includes("windows")) {
+      if (!("Notification" in window)) {
+        alert("This browser does not support desktop notification");
+      } else if (Notification.permission === "granted") {
+        console.log("Sending notification");
+
+        new Notification(`${c.user.name} mandou uma mensagem!`, {
+          body: c.value,
+        });
+      } else if (Notification.permission !== "denied") {
+        Notification.requestPermission().then((permission) => {
+          if (permission === "granted") {
+            console.log("Sending notification");
+
+            new Notification(`${c.user.name} mandou uma mensagem!`, {
+              body: c.value,
+            });
+          }
+        });
+      }
+    }
+  };
 
   useEffect(() => {
     const user = localStorage.getItem("c-text.user");
@@ -116,24 +148,50 @@ const Home = () => {
   }, []);
 
   useEffect(() => {
-    socket.on("userTyping", (e) => {
-      setUserTyping(e.name);
+    socket.on("userTypingId", (e) => {
+      if (e.type == "typing") {
+        setUserTyping({
+          ...userTyping,
+          typing: e.user.id !== configs.user.id,
+          color: e.user.color,
+        });
+      } else {
+        setUserTyping({
+          ...userTyping,
+          typing: false,
+          color: 0,
+        });
+      }
+
+      setTimeout(() => {
+        scrollToLast();
+      }, 0);
     });
-  }, [socket]);
+  }, [socket, configs.user]);
 
   const notifyMessage = () => {
-    setConfigs({
-      ...configs,
-      notified: true,
-    });
-    console.log(messages, configs.notified);
+    if (messages.length > 0) {
+      const lastMessage = messages[messages.length - 1];
+
+      if (
+        lastMessage?.user.id != configs.user.id &&
+        notified.value == false &&
+        notified.focused == false
+      ) {
+        setNotified(true);
+
+        setTimeout(() => {
+          setNotified(false);
+        }, 0.25 * 1000 * 60);
+
+        notifyUser(lastMessage);
+      }
+    }
   };
 
   useEffect(() => {
     socket.on("messages", (e) => {
       setMessages(e.value);
-
-      // notifyMessage();
     });
   }, [socket]);
 
@@ -152,26 +210,66 @@ const Home = () => {
 
   useEffect(() => {
     scrollToLast();
+
+    notifyMessage();
   }, [messages]);
+
+  useEffect(() => {
+    window.addEventListener("focus", () => {
+      setNotified({
+        ...notified,
+        focused: true,
+      });
+    });
+
+    window.addEventListener("blur", () => {
+      setNotified({
+        ...notified,
+        focused: false,
+      });
+    });
+  }, []);
+
+  // useEffect(() => {
+  //   console.log(notified);
+  // }, [notified]);
 
   const allStickers = require.context("/public/stickers/", true);
   const stickers = allStickers.keys().map((image) => allStickers(image));
 
   return (
-    <div className="px-6 pb-6 p-3 w-screen h-screen">
+    <div className={`px-6 pb-6 p-3 w-screen h-screen`}>
       <Head>
         <title>Chat</title>
       </Head>
       <div
-        className={`h-full transition relative bg-neutral-200 shadow-md py-2 rounded-lg mb-2 px-2 overflow-y-auto ${
+        className={`h-full transition relative bg-neutral-200 shadow-md py-2 rounded-lg mb-2 px-2 ${
+          inputFocus == true ? "max-h-[50%]" : "max-h-[75%]"
+        } overflow-y-auto ${
           configs.type == "edit"
-            ? "max-h-[86%]"
+            ? "md:max-h-[83.25%]"
+            : configs.type == "image"
+            ? configs.reply?.type == "image"
+              ? configs.reply.value.length > 1
+                ? "md:max-h-[55%]"
+                : "md:max-h-[59%]"
+              : "md:max-h-[71%]"
             : configs.reply
             ? configs.reply.type === "sticker"
-              ? "max-h-[79%]"
-              : "max-h-[82%]"
-            : "max-h-[93%]"
+              ? "md:max-h-[76.25%]"
+              : "md:max-h-[79.25%]"
+            : configs.value.length > 153
+            ? "md:max-h-[89%]"
+            : "md:max-h-[93%]"
         }`}
+
+        // : configs.reply
+        //     ? configs.reply.type === "sticker"
+        //       ? "max-h-[76.25%]"
+        //       : "max-h-[79.25%]"
+        //     : configs.value.length > 153
+        //     ? "max-h-[89%]"
+        //     : "max-h-[93%]"
       >
         <div className="pb-2 mt-2">
           {messages?.map((each, i) =>
@@ -288,8 +386,23 @@ const Home = () => {
                           />
                         </div>
                       )}
+
+                      {each.reply.type === "image" && (
+                        <div className="">
+                          <Image
+                            unoptimized
+                            src={each.reply.imageURL}
+                            alt={each.reply.value}
+                            width={50}
+                            height={50}
+                          />
+                        </div>
+                      )}
+
                       {each.reply.type === "message" && (
-                        <div className="">{each.reply.value}</div>
+                        <div className="max-w-[84%] max-h-[150px] truncate break-words">
+                          {each.reply.value}
+                        </div>
                       )}
                     </div>
                   )}
@@ -313,8 +426,10 @@ const Home = () => {
                     </div>
                   )}
                   {each.type === "message" && (
-                    <div className="flex items-end justify-between gap-2">
-                      {each.value}
+                    <div className="flex flex-col items-end w-full justify-between gap-2">
+                      <div className={`max-w-[100%] break-words`}>
+                        {each.value}
+                      </div>
                       <div className="text-xs text-neutral-600 flex gap-0.5">
                         {each.edited && (
                           <div className="italic text-neutral-500 text-[11px]">
@@ -327,6 +442,25 @@ const Home = () => {
                   )}
                   {each.type === "deleted" && (
                     <div className="text-neutral-500">{each.value}</div>
+                  )}
+
+                  {each.type === "image" && (
+                    <div>
+                      <img className="rounded-lg mb-2" src={each.imageURL} />
+                      <div className="flex flex-col items-end w-full justify-between gap-2">
+                        <div className={`max-w-[100%] break-words`}>
+                          {each.value}
+                        </div>
+                        <div className="text-xs text-neutral-600 flex gap-0.5">
+                          {each.edited && (
+                            <div className="italic text-neutral-500 text-[11px]">
+                              Editada
+                            </div>
+                          )}
+                          {each.time}
+                        </div>
+                      </div>
+                    </div>
                   )}
                 </div>
               </div>
@@ -408,8 +542,21 @@ const Home = () => {
                           />
                         </div>
                       )}
+                      {each.reply.type === "image" && (
+                        <div className="">
+                          <Image
+                            unoptimized
+                            src={each.reply.imageURL}
+                            alt={each.reply.value}
+                            width={50}
+                            height={50}
+                          />
+                        </div>
+                      )}
                       {each.reply.type === "message" && (
-                        <div className="">{each.reply.value}</div>
+                        <div className="max-w-full truncate">
+                          {each.reply.value}
+                        </div>
                       )}
                     </div>
                   )}
@@ -433,14 +580,16 @@ const Home = () => {
                     </div>
                   )}
                   {each.type === "message" && (
-                    <div className="flex items-end justify-between gap-2">
+                    <div className="flex flex-col justify-between gap-2">
                       <div>
                         <div className="text-sm font-bold underline py-0.5 text-neutral-600">
                           {each.user.name}
                         </div>
-                        {each.value}
+                        <div className="max-w-[25ch] break-words">
+                          {each.value}
+                        </div>
                       </div>
-                      <div className="text-xs text-neutral-600 flex gap-0.5">
+                      <div className="text-xs text-neutral-600 flex gap-0.5 items-center justify-end pb-0.5">
                         {each.edited && (
                           <div className="italic text-neutral-500 text-[11px]">
                             Editada
@@ -453,11 +602,39 @@ const Home = () => {
                   {each.type === "deleted" && (
                     <div className="text-neutral-500">{each.value}</div>
                   )}
+
+                  {each.type === "image" && (
+                    <div>
+                      <img className="rounded-lg my-2" src={each.imageURL} />
+                      <div className="flex flex-col items-end w-full justify-between gap-2">
+                        <div className={`max-w-[100%] break-words`}>
+                          {each.value}
+                        </div>
+                        <div className="text-xs text-neutral-600 flex gap-0.5">
+                          {each.edited && (
+                            <div className="italic text-neutral-500 text-[11px]">
+                              Editada
+                            </div>
+                          )}
+                          {each.time}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )
           )}
           <div ref={lastMessageRef} />
+          {userTyping.typing && (
+            <div
+              className={`${
+                textColors[userTyping.color].primary
+              } w-min p-1 py-2 rounded`}
+            >
+              <div className="loader"></div>
+            </div>
+          )}
         </div>
         {/* {!userTyping == "" && (
           <div className="text-xs font-bold absolute bottom-3 left-3">
@@ -466,7 +643,7 @@ const Home = () => {
         )} */}
       </div>
       <div>
-        <div className="bg-gray-300 shadow-lg rounded-lg transition p-2 flex flex-col">
+        <div className="bg-gray-300  rounded-lg transition p-2 flex flex-col">
           {configs.reply && configs.type !== "edit" && (
             <div className="border-0 text-sm border-solid border-s-4 border-red-500 bg-neutral-400 p-2 rounded mb-2 w-full relative">
               <div className="text-sm font-bold underline py-0.5 text-red-600">
@@ -484,8 +661,22 @@ const Home = () => {
                   />
                 </div>
               )}
+              {configs.reply.type === "image" && (
+                <div className="">
+                  <Image
+                    unoptimized
+                    src={configs.reply.imageURL}
+                    alt={configs.reply.value}
+                    width={35}
+                    height={35}
+                  />
+                  <div>{configs.reply.value}</div>
+                </div>
+              )}
               {configs.reply.type === "message" && (
-                <div className="">{configs.reply.value}</div>
+                <div className="max-w-screen truncate">
+                  {configs.reply.value}
+                </div>
               )}
               <div
                 onClick={() => {
@@ -503,7 +694,9 @@ const Home = () => {
                 <div className="font-bold italic text-neutral-700">
                   Editando:
                 </div>
-                {configs.lastMessage.value}
+                <div className="max-w-[80%] truncate">
+                  {configs.lastMessage.value}
+                </div>
               </div>
               <div
                 onClick={() => {
@@ -515,28 +708,78 @@ const Home = () => {
               </div>
             </div>
           )}
+          {configs.type === "image" && (
+            <div className="mb-2.5">
+              <div className="flex items-center w-32 justify-start relative">
+                <div
+                  onClick={() => {
+                    setConfigs({ ...configs, type: "message", image: "" });
+                  }}
+                  className="absolute text-white bg-red-500 -top-1 -right-1 hover:scale-105 rounded-full transition text-base cursor-pointer"
+                >
+                  <IoIosClose className="text-xl" />
+                </div>
+                <img className="w-32 h-32 object-cover" src={configs.image} />
+              </div>
+            </div>
+          )}
           <div className="flex items-center justify-between">
-            <input
-              className="bg-inherit w-full outline-none px-2"
+            <textarea
+              className={`${
+                configs.value.length > 153 ? "" : "max-h-[25px]"
+              } resize-none bg-inherit w-full outline-none px-2 text-wrap`}
               placeholder="Digite aqui..."
               value={configs.value}
               autoComplete="off"
               id="input"
+              onFocus={() => {
+                if (navigator.userAgent.includes("windows")) return;
+                setInputFocus(true);
+              }}
+              onBlur={() => {
+                if (navigator.userAgent.includes("windows")) return;
+
+                setInputFocus(false);
+              }}
               onChange={(e) => {
                 setConfigs({
                   ...configs,
                   value: e.target.value,
                 });
+
+                if (e.target.value.length > 0) {
+                  socket.emit("userTyping", {
+                    user: { id: configs.user.id, color: configs.user.color },
+                    type: "typing",
+                  });
+                } else {
+                  socket.emit("userTyping", {
+                    user: { id: configs.user.id, color: configs.user.color },
+                    type: "sending",
+                  });
+                }
               }}
               onKeyDown={(e) => {
                 if (e.key == "Enter") {
-                  if (configs.value == "" || configs.value == null) return;
+                  e.preventDefault();
+                  if (
+                    configs.type !== "image" &&
+                    (configs.value == "" || configs.value == null)
+                  )
+                    return;
                   const time = moment();
                   const message_id = Math.random().toString(16).slice(2);
+
+                  const val = configs.value;
+                  // const val =
+                  //   configs.value.substring(0, configs.value.length) +
+                  //   "\n" +
+                  //   configs.value.substring(configs.value.length + "\n");
+
                   if (configs.type === "edit") {
                     socket.emit("editMessage", {
                       id: configs.lastMessage.id,
-                      value: configs.value,
+                      value: val,
                       reply: configs.reply ? configs.reply : false,
                       user: configs.user,
                       time: configs.lastMessage.time,
@@ -548,11 +791,23 @@ const Home = () => {
                   if (configs.type === "message") {
                     socket.emit("newMessage", {
                       id: message_id,
-                      value: configs.value,
+                      value: val,
                       reply: configs.reply ? configs.reply : false,
                       user: configs.user,
                       time: time.format("HH:mm"),
                       type: "message",
+                    });
+                  }
+
+                  if (configs.type === "image") {
+                    socket.emit("newMessage", {
+                      id: message_id,
+                      value: configs.value,
+                      imageURL: configs.image,
+                      reply: configs.reply ? configs.reply : false,
+                      user: configs.user,
+                      time: time.format("HH:mm"),
+                      type: "image",
                     });
                   }
 
@@ -562,6 +817,11 @@ const Home = () => {
                     type: "message",
                     reply: null,
                     lastMessageId: message_id,
+                  });
+
+                  socket.emit("userTyping", {
+                    user: { id: configs.user.id, color: configs.user.color },
+                    type: "sending",
                   });
                 }
                 if (e.key == "ArrowDown") {
@@ -580,6 +840,25 @@ const Home = () => {
                     lastMessage: lastMessage,
                     type: "edit",
                   });
+                }
+              }}
+              onPaste={(e) => {
+                if (e.clipboardData && e.clipboardData.items) {
+                  const items = e.clipboardData.items;
+
+                  for (var i = 0; i < items.length; i++) {
+                    if (items[i].type.indexOf("image") !== -1) {
+                      const blob = items[i].getAsFile();
+
+                      const source = window.webkitURL.createObjectURL(blob);
+
+                      setConfigs({
+                        ...configs,
+                        type: "image",
+                        image: source,
+                      });
+                    }
+                  }
                 }
               }}
             />
@@ -666,7 +945,7 @@ const Home = () => {
 
                           console.log(settings);
                         }}
-                        className={`${each.primary} w-5 h-5 rounded cursor-pointer aria-selected:outline-2 aria-selected:outline aria-selected:outline-blue-300 aria-selected:outline-offset-2`}
+                        className={`${each.primary} shadow-md w-5 h-5 rounded cursor-pointer aria-selected:outline-2 aria-selected:outline aria-selected:outline-blue-300 aria-selected:outline-offset-2`}
                         aria-selected={each.selected}
                       ></div>
                     ))}
@@ -681,6 +960,7 @@ const Home = () => {
                           ...configs.user,
                           name: settings.name,
                           color: settings.color,
+                          timeToNotify: settings.timeToNotify,
                         },
                       });
 

@@ -35,8 +35,10 @@ io.on("connect", (socket) => {
       messages[msgReply].reply.value = e.value;
     }
 
-    socket.broadcast.emit("messages", { value: messages });
-    socket.emit("messages", { value: messages });
+    socket.broadcast.emit("messages", {
+      value: messages.slice(messages_length),
+    });
+    socket.emit("messages", { value: messages.slice(messages_length) });
   });
 
   socket.on("deleteMessage", (e) => {
@@ -51,8 +53,15 @@ io.on("connect", (socket) => {
       };
     }
 
-    socket.broadcast.emit("messages", { value: messages });
-    socket.emit("messages", { value: messages });
+    socket.broadcast.emit("messages", {
+      value: messages.slice(messages_length),
+    });
+    socket.emit("messages", { value: messages.slice(messages_length) });
+  });
+
+  socket.on("userTyping", (e) => {
+    socket.broadcast.emit("userTypingId", e);
+    socket.emit("userTypingId", e);
   });
 });
 
