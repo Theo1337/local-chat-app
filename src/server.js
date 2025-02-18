@@ -9,7 +9,8 @@ const nextApp = next({ dev });
 const nextHandler = nextApp.getRequestHandler();
 
 let messages = [];
-const messages_length = 30 * -1;
+let usersTyping = [{ id: "2d591e2610ab5", color: 7 }];
+const messages_length = 45 * -1;
 
 io.on("connect", (socket) => {
   socket.on("newMessage", (e) => {
@@ -60,8 +61,10 @@ io.on("connect", (socket) => {
   });
 
   socket.on("userTyping", (e) => {
-    socket.broadcast.emit("userTypingId", e);
-    socket.emit("userTypingId", e);
+    console.log([...new Set(usersTyping)]);
+
+    socket.broadcast.emit("userTypingId", new Set(usersTyping));
+    socket.emit("userTypingId", new Set(usersTyping));
   });
 });
 

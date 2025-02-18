@@ -45,6 +45,9 @@ const Home = () => {
     color: 0,
     saved: false,
   });
+
+  const [userTyping, setUserTyping] = useState([]);
+
   const [textColors, setTextColors] = useState([
     {
       primary: "bg-pink-300",
@@ -87,12 +90,6 @@ const Home = () => {
       selected: true,
     },
   ]);
-
-  const [userTyping, setUserTyping] = useState({
-    typing: false,
-    color: 0,
-  });
-  const [inputFocus, setInputFocus] = useState(false);
 
   const lastMessageRef = useRef(null);
 
@@ -149,19 +146,7 @@ const Home = () => {
 
   useEffect(() => {
     socket.on("userTypingId", (e) => {
-      if (e.type == "typing") {
-        setUserTyping({
-          ...userTyping,
-          typing: e.user.id !== configs.user.id,
-          color: e.user.color,
-        });
-      } else {
-        setUserTyping({
-          ...userTyping,
-          typing: false,
-          color: 0,
-        });
-      }
+      setUserTyping(e);
 
       setTimeout(() => {
         scrollToLast();
@@ -238,30 +223,14 @@ const Home = () => {
   const stickers = allStickers.keys().map((image) => allStickers(image));
 
   return (
-    <div className={`px-6 pb-6 p-3 w-screen h-screen`}>
+    <div
+      className={`p-2 px-4 w-full h-screen flex flex-col gap-2.5 flex-center justify-between`}
+    >
       <Head>
         <title>Chat</title>
       </Head>
       <div
-        className={`h-full transition relative bg-neutral-200 shadow-md py-2 rounded-lg mb-2 px-2 ${
-          inputFocus == true ? "max-h-[50%]" : "max-h-[75%]"
-        } overflow-y-auto ${
-          configs.type == "edit"
-            ? "md:max-h-[83.25%]"
-            : configs.type == "image"
-            ? configs.reply?.type == "image"
-              ? configs.reply.value.length > 1
-                ? "md:max-h-[55%]"
-                : "md:max-h-[59%]"
-              : "md:max-h-[71%]"
-            : configs.reply
-            ? configs.reply.type === "sticker"
-              ? "md:max-h-[76.25%]"
-              : "md:max-h-[79.25%]"
-            : configs.value.length > 153
-            ? "md:max-h-[89%]"
-            : "md:max-h-[93%]"
-        }`}
+        className={`transition relative bg-neutral-200 shadow-md py-2 rounded-lg px-2 h-full overflow-auto`}
 
         // : configs.reply
         //     ? configs.reply.type === "sticker"
@@ -626,13 +595,23 @@ const Home = () => {
             )
           )}
           <div ref={lastMessageRef} />
-          {userTyping.typing && (
-            <div
-              className={`${
-                textColors[userTyping.color].primary
-              } w-min p-1 py-2 rounded`}
-            >
-              <div className="loader"></div>
+          {userTyping.length > 0 && (
+            <div>
+              {/* remove user with same id as client */}
+              {userTyping.map((each, i) => (
+                <div>
+                  {each.id !== configs.user.id && (
+                    <div
+                      className={`${
+                        textColors[each.color].primary
+                      } w-min p-1 py-2 rounded`}
+                      key={i}
+                    >
+                      <div className="loader"></div>
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           )}
         </div>
@@ -642,8 +621,8 @@ const Home = () => {
           </div>
         )} */}
       </div>
-      <div>
-        <div className="bg-gray-300  rounded-lg transition p-2 flex flex-col">
+      <div className="flex items-center justify-between w-full">
+        <div className="bg-gray-300 w-full  rounded-lg transition p-2 flex flex-col">
           {configs.reply && configs.type !== "edit" && (
             <div className="border-0 text-sm border-solid border-s-4 border-red-500 bg-neutral-400 p-2 rounded mb-2 w-full relative">
               <div className="text-sm font-bold underline py-0.5 text-red-600">
@@ -725,22 +704,11 @@ const Home = () => {
           )}
           <div className="flex items-center justify-between">
             <textarea
-              className={`${
-                configs.value.length > 153 ? "" : "max-h-[25px]"
-              } resize-none bg-inherit w-full outline-none px-2 text-wrap`}
+              className={`resize-none bg-inherit h-[25px] max-h-fit w-full outline-none px-2 text-wrap`}
               placeholder="Digite aqui..."
               value={configs.value}
               autoComplete="off"
               id="input"
-              onFocus={() => {
-                if (navigator.userAgent.includes("windows")) return;
-                setInputFocus(true);
-              }}
-              onBlur={() => {
-                if (navigator.userAgent.includes("windows")) return;
-
-                setInputFocus(false);
-              }}
               onChange={(e) => {
                 setConfigs({
                   ...configs,
@@ -752,7 +720,7 @@ const Home = () => {
                     user: { id: configs.user.id, color: configs.user.color },
                     type: "typing",
                   });
-                } else {
+                } else if (e.target.value.length == 0) {
                   socket.emit("userTyping", {
                     user: { id: configs.user.id, color: configs.user.color },
                     type: "sending",
@@ -760,7 +728,7 @@ const Home = () => {
                 }
               }}
               onKeyDown={(e) => {
-                if (e.key == "Enter") {
+                if (e.key == "Enter" && !e.shiftKey) {
                   e.preventDefault();
                   if (
                     configs.type !== "image" &&
@@ -942,8 +910,6 @@ const Home = () => {
                             ...settings,
                             color: i,
                           });
-
-                          console.log(settings);
                         }}
                         className={`${each.primary} shadow-md w-5 h-5 rounded cursor-pointer aria-selected:outline-2 aria-selected:outline aria-selected:outline-blue-300 aria-selected:outline-offset-2`}
                         aria-selected={each.selected}
