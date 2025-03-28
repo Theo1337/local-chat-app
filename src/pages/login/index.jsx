@@ -8,11 +8,9 @@ import Head from "next/head";
 const LoginPage = () => {
   const [configs, setConfigs] = useState({
     name: "",
-    password: "",
   });
 
   const handleSubmit = () => {
-    if (configs.password == "theoiana") {
       localStorage.setItem(
         "c-text.user",
         JSON.stringify({
@@ -23,7 +21,6 @@ const LoginPage = () => {
       );
 
       window.location.href = "/";
-    }
   };
 
   return (
@@ -37,13 +34,6 @@ const LoginPage = () => {
           placeholder="Nome"
           onChange={(e) => {
             setConfigs({ ...configs, name: e.target.value });
-          }}
-        />
-        <Input
-          placeholder="Senha"
-          type="password"
-          onChange={(e) => {
-            setConfigs({ ...configs, password: e.target.value });
           }}
           onKeyDown={(e) => {
             if (e.key == "Enter") {
